@@ -12,13 +12,18 @@ print("classes: " , house_attribute_options[house_tag_col])
 temp_data = house_data[:5, -5:]
 print(temp_data)
 
-eval_train, eval_test = dispatch_decision_tree(house_data, \
-    house_attribute, \
-    house_attribute_type, \
-    house_attribute_options, \
-    house_tag_col, \
-    "gini", printTree=True)
+eval_train, eval_test = dispatch_decision_tree(house_data, 
+    house_attribute, 
+    house_attribute_type, 
+    house_attribute_options, 
+    house_tag_col, 
+    "entropy", 
+    printTree=True, 
+    random_state=42, 
+    minimal_size_for_split=0., 
+    minimal_gain=0., 
+    maximal_depth=10000)
 
-# entropy 1.0 0.9310344827586207
-# gini 1.0 0.9310344827586207
+# when rnd_state=42, gini and entropy are the same 
+# for wine also, that was weird
 print(eval_train, eval_test)

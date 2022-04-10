@@ -17,5 +17,5 @@ eval_train, eval_test = dispatch_decision_tree(wine_data, \
     wine_attribute_type, \
     wine_attribute_options, \
     wine_tag_col, \
-    "entropy", printTree=True)
+    "entropy", printTree=True, random_state=100)
 print(eval_train, eval_test)

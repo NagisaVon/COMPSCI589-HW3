@@ -9,15 +9,19 @@ cmc_data, cmc_attribute = load_data("datasets/cmc.data", csv_delimiter=',')
 cmc_attribute_type = ["numerical","categorical","categorical","numerical","categorical","categorical","categorical","categorical","categorical","class"]
 cmc_attribute_options = get_possible_options(cmc_data, cmc_attribute, cmc_attribute_type)
 cmc_tag_col = -1
-print("classes: " , cmc_attribute_options[cmc_tag_col])
+# print("classes: " , cmc_attribute_options[cmc_tag_col])
 # print(cmc_attribute_options)
-print(cmc_data[:5])
+# print(cmc_data[:5])
 
-eval_train, eval_test = dispatch_decision_tree(cmc_data, \
-    cmc_attribute, \
-    cmc_attribute_type, \
-    cmc_attribute_options, \
-    cmc_tag_col, \
-    "entropy", printTree=True)
+eval_train, eval_test = dispatch_decision_tree(cmc_data, 
+    cmc_attribute, 
+    cmc_attribute_type, 
+    cmc_attribute_options, 
+    cmc_tag_col, 
+    "entropy", printTree=True, 
+    minimal_size_for_split=2, 
+    minimal_gain=0, 
+    maximal_depth=11
+)
 print(eval_train, eval_test)
 
