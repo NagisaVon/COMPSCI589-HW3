@@ -7,17 +7,6 @@ from sklearn.model_selection import train_test_split
 from collections import Counter
 import matplotlib.pyplot as plt
 
-def get_possible_options(data, attr, attr_type):
-    options = []
-    for i in range(len(attr)):
-        opt = []
-        if attr_type[i] == "numerical":
-            opt = {}
-        else: # if the attribute is categorical or a class
-            opt = set(data[i])
-        options.append(opt)
-    return options
-
 def entropy(data):
     '''
     list of classes -> entropy
@@ -33,6 +22,20 @@ def gini(data):
     return 1 - sum([k/total * (k/total) for k in cnt])
 
 
+def get_possible_options(data, attr, attr_type):
+    options = []
+    for i in range(len(attr)):
+        opt = []
+        if attr_type[i] == "numerical":
+            # opt = [0, 1] # 0: <=, 1: >
+            val = list(sorted(set(data.T[i])))
+            opt = [val[i] + val[i+1]/2 for i in range(len(val)-1)]
+        else: # if the attribute is categorical or a class
+            opt = list(set(data.T[i]))
+        options.append(opt)
+    return options
+
+
 def entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, algo):
     '''
     house_data(w/ tags)->entropy_of_all_attributes[]
@@ -40,39 +43,71 @@ def entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, algo):
     attr_count = len(data.T)
     total_entry = len(data)
     ent_list = []
+    numerial_split_point = []
     # for each attributes, calculate information gain
     for i in range(attr_count):
         # to use argmin later, keep all attribute in the list
         # skip if not in attr_list
+        # (this is no longer neseccary because we don't delete attributes from data
+        # but just left it here)
         if(not i in attr_list or attr_type[i] == 'class'):
             ent_list.append(1000)  # infinite high entropy
+            numerial_split_point.append(None)
             continue
-        # gather the class labels of the current attribute for each options
-        ent = 0
-        for j in attr_opt[i]:
-            option_tags = [row[tag_col] for row in data if row[i] == j]
-            ent += len(option_tags)/total_entry * algo(option_tags)
-        ent_list.append(ent)
-    return ent_list
+        elif (attr_type[i] == 'numerical'):
+            best_ent = 1000
+            best_split_point = -1
+            for split_ind in range(len(attr_opt[i])):
+                # 0 for <=, 1 for >
+                option_tags = {0: [], 1: []}
+                for row in data:
+                    if row[i] <= attr_opt[i][split_ind]:
+                        option_tags[0].append(row[tag_col])
+                    else:
+                        option_tags[1].append(row[tag_col])
+                ent = sum(len(option_tags[opt])/total_entry * algo(option_tags[opt]) for opt in option_tags)
+                if (ent < best_ent):
+                    best_ent = ent
+                    best_split_point = attr_opt[i][split_ind]
+            ent_list.append(best_ent)  
+            numerial_split_point.append(best_split_point)
+        elif (attr_type[i] == 'categorical'): 
+            # init dictionary with keys
+            # don't use the from the dict.fromkeys function
+            # that will link all keys to the same array
+            option_tags = {attr_opt[i][j]: [] for j in range(len(attr_opt[i]))}
+            # a optimization, make sure only go through the data once
+            for row in data:
+                option_tags[row[i]].append(row[tag_col])
+            ent = sum(len(option_tags[opt])/total_entry * algo(option_tags[opt]) for opt in option_tags)
+            ent_list.append(ent)
+            numerial_split_point.append(None)
+    return ent_list, numerial_split_point
 
 
 class Node:
     # tag means different classes, since class is a reserved keyword
-    def __init__(self, depth, isLeaf=False, attr_index=None, tag=None ):
+    def __init__(self, depth, isLeaf=False, attr_index=None, num_split=None, tag=None ):
         self.depth = depth
         self.attr_index = attr_index
+        self.num_split = num_split
         self.isLeaf = isLeaf
         self.tag = tag
         self.children = []
         self.option = None
         self.parent = None
+        if (num_split is None):
+            self.type = "categorical"
+        else:
+            self.type = "numerical"
+
 
     def print_tree(self, attribute_list, indent=0):
         ind_str = ' ' * indent
         if self.isLeaf:
             print( ind_str + "Leaf:CLASS" , self.tag, "OPTION", self.option , "DEPTH" , self.depth)
         else:
-            print( ind_str + attribute_list[self.attr_index] , "OPTION" , self.option , "DEPTH" , self.depth)
+            print( ind_str , attribute_list[self.attr_index] ,"CLASS", self.tag,  "NSPLIT", self.num_split, "OPTION" , self.option , "DEPTH" , self.depth)
             for child in self.children:
                 child.print_tree(attribute_list, indent+2)
 
@@ -86,7 +121,7 @@ def build_decision_tree(data, attr_list, attr_type, attr_opt, tag_col, algo, _de
     if (not data.any()):
         return Node( _depth, isLeaf=True, tag=None)
 
-    tags = data.T[-1]
+    tags = data.T[tag_col]
     original_entropy = entropy(tags)
 
     # If there is only one tag, return the tag
@@ -94,25 +129,40 @@ def build_decision_tree(data, attr_list, attr_type, attr_opt, tag_col, algo, _de
         return Node( _depth, isLeaf=True, tag=Counter(tags).most_common()[0][0])
     # this subtraction is not necessary, just to be justify the name 'info_gain'
     if algo=='gini':
-        gini_val = entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, gini)
+        gini_val, num_split = entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, gini)
         decided_attr = np.argmin(gini_val)
+        decided_num_split = num_split[decided_attr]
     elif algo=='entropy':
-        info_gain = [original_entropy - ent for ent in entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, entropy)]
+        entropy_list, num_split = entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, entropy)
+        info_gain = [original_entropy - ent for ent in entropy_list]
         decided_attr = np.argmax(info_gain)
-
+        decided_num_split = num_split[decided_attr]
     # get the index of the attribute with highest information gain
-    nd = Node( _depth, isLeaf=False, attr_index=decided_attr ) 
+    nd = Node( _depth, isLeaf=False, attr_index=decided_attr, num_split=decided_num_split) 
     # keep track of a majority tag in case the leaf is None
     # .most_common()[0][0] returns the most common tag (key of a dict)
     nd.tag = Counter(data.T[tag_col]).most_common()[0][0] 
-    # remove decision attribute from attr_list
-    new_attr_list = [x for x in attr_list if x != decided_attr]
+    
+    isNumerical = True if (decided_num_split is not None) else False
+    # build subtree for each possible option
+    # Numerical 
+    if isNumerical:
+        options = [0, 1] # the attr_opt for numerical attribute stores possible splits instead
+    else: # Catetorical 
+        options = attr_opt[decided_attr]
+    
 
-    # build subtree for each possible option 
-    for opt in attr_opt[decided_attr]:
+    for opt in options:
         # filtered data
-        new_data = data[data.T[decided_attr] == opt]
-        subtree = build_decision_tree(new_data, new_attr_list, attr_type, attr_opt, tag_col, algo, _depth+1) 
+        if isNumerical:
+            if opt == 0:
+                # a filter, if at the decided_attr, the value is <= decided_num_split, then that row is kept
+                filtered_data = data[data.T[decided_attr] <= decided_num_split]
+            else: 
+                filtered_data = data[data.T[decided_attr] > decided_num_split]
+        else:
+            filtered_data = data[data.T[decided_attr] == opt]
+        subtree = build_decision_tree(filtered_data, attr_list, attr_type, attr_opt, tag_col, algo, _depth+1) 
         subtree.option = opt
         nd.children.append(subtree)
         subtree.parent = nd
@@ -133,35 +183,49 @@ def load_data(cvsfilename, csv_delimiter=','):
     return (data, attributes)
 
 
-
-def predict(row, node):
-    for child in node.children:
-        if row[node.attr_index] == child.option:
-            if child.isLeaf:
-                if child.tag == None:
-                    return node.tag
-                else:
-                    return child.tag
-            else:
-                return predict(row, child)
+def find_matched_child(row, node):
+    # row[node.attr_index] is the the data of the attribute of the node
+    if node.type == "numerical":
+        if row[node.attr_index] <= node.num_split:
+            return node.children[0]
+        else: 
+            return node.children[1]
+    else:  # categorical
+        for child in node.children:
+            if row[node.attr_index] == child.option:
+                return child
     return None;
 
 
-def evaluate(data, tree):
+def predict(row, node):
+    child = find_matched_child(row, node)
+    if child is None:
+        return None;
+    if child.isLeaf:
+        if child.tag == None:
+            return node.tag
+        else:
+            return child.tag
+    else:
+        return predict(row, child)
+
+
+def evaluate_acc(data, tree, tag_col):
     correct = 0
     for i in range(len(data)):
-        if data[i][-1] == predict(data[i], tree):
+        result = predict(data[i], tree)
+        if data[i][tag_col] == result:
             correct += 1
     return correct / len(data)
 
 
-def dispatch(data, attr, attr_type, attr_opt, tag_col, algo, random_state=42, printTree=False):
+def dispatch_decision_tree(data, attr, attr_type, attr_opt, tag_col, algo, random_state=42, printTree=False):
     train, test = train_test_split(data, test_size=0.2, shuffle=True, random_state=random_state)
     # build a attr_list not including the class attribute
     attr_list = [i for i in range(len(attr)) if attr_type[i] != "class"]
     tree = build_decision_tree(train, attr_list, attr_type, attr_opt, tag_col, algo)
     if(printTree):
         tree.print_tree(attr)
-    return evaluate(train, tree), evaluate(test, tree)
+    return evaluate_acc(train, tree, tag_col), evaluate_acc(test, tree, tag_col)
 
 

@@ -7,15 +7,18 @@ house_data, house_attribute = load_data("datasets/hw3_house_votes_84.csv")
 house_attribute_type = ["categorical","categorical","categorical","categorical","categorical","categorical","categorical","categorical","categorical","categorical","categorical","categorical","categorical","categorical","categorical","categorical","class"]
 house_attribute_options = get_possible_options(house_data, house_attribute, house_attribute_type)
 house_tag_col = -1
-print(house_attribute_options)
+print("classes: " , house_attribute_options[house_tag_col])
 # temporary test data
 temp_data = house_data[:5, -5:]
 print(temp_data)
 
-eval_train, eval_test = dispatch(house_data, \
+eval_train, eval_test = dispatch_decision_tree(house_data, \
     house_attribute, \
     house_attribute_type, \
     house_attribute_options, \
     house_tag_col, \
-    "entropy", printTree=True)
+    "gini", printTree=True)
+
+# entropy 1.0 0.9310344827586207
+# gini 1.0 0.9310344827586207
 print(eval_train, eval_test)
