@@ -1,5 +1,5 @@
 from decision_tree import *
-
+from math import sqrt
 
 # load house data
 house_data, house_attribute = load_data("datasets/hw3_house_votes_84.csv")
@@ -22,7 +22,9 @@ eval_train, eval_test = dispatch_decision_tree(house_data,
     random_state=42, 
     minimal_size_for_split=0., 
     minimal_gain=0., 
-    maximal_depth=10000)
+    maximal_depth=10000,
+    only_m_attr=int(sqrt(len(house_attribute)-1)) # very important to convert to int
+)
 
 # when rnd_state=42, gini and entropy are the same 
 # for wine also, that was weird

@@ -1,7 +1,6 @@
 from decision_tree import * 
 from random_forest import *
 
-
 # load wine data 
 wine_data, wine_attribute = load_data("datasets/hw3_wine.csv", csv_delimiter='\t')
 

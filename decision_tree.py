@@ -1,8 +1,6 @@
-import csv
-import json
+import csv, math, random
 from pprint import pprint
 import numpy as np
-import math
 from sklearn.model_selection import train_test_split
 from collections import Counter
 import matplotlib.pyplot as plt
@@ -36,10 +34,13 @@ def get_possible_options(data, attr, attr_type):
     return options
 
 
-def entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, algo):
+def entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, attr_list_limited, algo):
     '''
     house_data(w/ tags)->entropy_of_all_attributes[]
     '''
+    # attr_count is not calcutated from the attr_list, which removed "class" attribute
+    # but from the data demension, which includes the "class" attribute
+    # this is to make sure the argmin/argmax function works
     attr_count = len(data.T)
     total_entry = len(data)
     ent_list = []
@@ -49,8 +50,10 @@ def entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, algo):
         # to use argmin later, keep all attribute in the list
         # skip if not in attr_list
         # (this is no longer neseccary because we don't delete attributes from data
-        # but just left it here)
-        if(not i in attr_list or attr_type[i] == 'class'):
+        # but i keep it here just in case)
+        # also skip if only look at m attributes, but i is not is attr_list_limited
+        isExcluded = (attr_list_limited is not None) and (not i in attr_list_limited)
+        if(not i in attr_list or attr_type[i] == 'class' or isExcluded):
             ent_list.append(1000)  # infinite high entropy
             numerial_split_point.append(None)
             continue
@@ -112,7 +115,7 @@ class Node:
                 child.print_tree(attribute_list, indent+2)
 
 
-def build_decision_tree(data, attr_list, attr_type, attr_opt, tag_col, algo, minimal_size_for_split, minimal_gain, maximal_depth, _depth=0):
+def build_decision_tree(data, attr_list, attr_type, attr_opt, tag_col, algo, minimal_size_for_split, minimal_gain, maximal_depth, only_m_attr, _depth=0):
 
     # If there are no more data
     if (not data.any()):
@@ -134,9 +137,18 @@ def build_decision_tree(data, attr_list, attr_type, attr_opt, tag_col, algo, min
         or original_entropy == 0): 
         return Node( _depth, isLeaf=True, tag=most_common_tag)
 
+    # for random forest, only consider m attributes
+    # always pass only_m_attr to avoid calculate sqrt multiple times
+    # make sure attr_list has enough length (it will always have since no more attributes removed)
+    # and "class" is already removed from attr_list
+    if only_m_attr != 0 and only_m_attr < len(attr_list): 
+        attr_list_limited = random.sample(attr_list, only_m_attr)
+    else:
+        attr_list_limited = None
+
     # get the index of the attribute with highest information gain
     if algo=='gini':
-        gini_val, num_split = entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, gini)
+        gini_val, num_split = entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, attr_list_limited, gini)
         decided_attr = np.argmin(gini_val)
         m_info_gain = np.min(gini_val)
         # information gain too low
@@ -144,11 +156,11 @@ def build_decision_tree(data, attr_list, attr_type, attr_opt, tag_col, algo, min
             return Node( _depth, isLeaf=True, tag=most_common_tag)
         decided_num_split = num_split[decided_attr]
     elif algo=='entropy':
-        entropy_list, num_split = entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, entropy)
+        entropy_list, num_split = entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, attr_list_limited, entropy)
         # this subtraction is not necessary, just to be justify the name 'info_gain'
         info_gain = [original_entropy - ent for ent in entropy_list]
-         # no more information gain
         m_info_gain = np.max(info_gain);
+        # information gain too low
         if (m_info_gain) <= minimal_gain:
             return Node( _depth, isLeaf=True, tag=most_common_tag)
         decided_attr = np.argmax(info_gain)
@@ -178,7 +190,7 @@ def build_decision_tree(data, attr_list, attr_type, attr_opt, tag_col, algo, min
                 filtered_data = data[data.T[decided_attr] > decided_num_split]
         else:
             filtered_data = data[data.T[decided_attr] == opt]
-        subtree = build_decision_tree(filtered_data, attr_list, attr_type, attr_opt, tag_col, algo, minimal_size_for_split, minimal_gain, maximal_depth, _depth+1) 
+        subtree = build_decision_tree(filtered_data, attr_list, attr_type, attr_opt, tag_col, algo, minimal_size_for_split, minimal_gain, maximal_depth, only_m_attr, _depth+1) 
         subtree.option = opt
         nd.children.append(subtree)
         subtree.parent = nd
@@ -235,11 +247,11 @@ def evaluate_acc(data, tree, tag_col):
     return correct / len(data)
 
 
-def dispatch_decision_tree(data, attr, attr_type, attr_opt, tag_col, algo, minimal_size_for_split=0., minimal_gain=0., maximal_depth=10000,random_state=42, printTree=False):
+def dispatch_decision_tree(data, attr, attr_type, attr_opt, tag_col, algo, minimal_size_for_split=0., minimal_gain=0., maximal_depth=10000,random_state=42, printTree=False, only_m_attr:int=0):
     train, test = train_test_split(data, test_size=0.2, shuffle=True, random_state=random_state)
     # build a attr_list not including the class attribute
     attr_list = [i for i in range(len(attr)) if attr_type[i] != "class"]
-    tree = build_decision_tree(train, attr_list, attr_type, attr_opt, tag_col, algo, minimal_size_for_split, minimal_gain, maximal_depth)
+    tree = build_decision_tree(train, attr_list, attr_type, attr_opt, tag_col, algo, minimal_size_for_split, minimal_gain, maximal_depth, only_m_attr)
     if(printTree):
         tree.print_tree(attr)
     return evaluate_acc(train, tree, tag_col), evaluate_acc(test, tree, tag_col)
