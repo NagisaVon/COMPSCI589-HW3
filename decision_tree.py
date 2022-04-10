@@ -119,21 +119,6 @@ def build_decision_tree(data, attr_list, attr_type, attr_opt, tag_col, algo, _de
     return nd
 
 
-# depreciated function
-def func_generate_template_json(attribute_list):
-    """
-    generate a json names file
-    """
-    attr_info = []
-    for i in range(len(attribute_list)):
-        attr_info.append({'attr_index': i, \
-            'attr_name': attribute_list[i], \
-            'attr_type': 'categorical', \
-            'attr_possible_options': [0, 1, 2]})
-    with open('temp.json', 'w') as f:
-        json.dump(attr_info, f, indent=2)
-
-
 def load_data(cvsfilename, csv_delimiter=','): 
     # import data, include encoding to ommit BOM  
     data = []
@@ -147,13 +132,6 @@ def load_data(cvsfilename, csv_delimiter=','):
     data = np.array(data).astype(float)
     return (data, attributes)
 
-
-# depreciated function
-def load_meta(jsonfilename):
-    meta = {};
-    with open(jsonfilename) as json_file:
-        meta['attribute_info'] = json.load(json_file)
-    return meta
 
 
 def predict(row, node):
