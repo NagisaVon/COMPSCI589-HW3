@@ -7,6 +7,16 @@ from sklearn.model_selection import train_test_split
 from collections import Counter
 import matplotlib.pyplot as plt
 
+def get_possible_options(data, attr, attr_type):
+    options = []
+    for i in range(len(attr)):
+        opt = []
+        if attr_type[i] == "numerical":
+            opt = {}
+        else: # if the attribute is categorical or a class
+            opt = set(data[i])
+        options.append(opt)
+    return options
 
 def entropy(data):
     '''
@@ -23,27 +33,25 @@ def gini(data):
     return 1 - sum([k/total * (k/total) for k in cnt])
 
 
-def entropy_in_list(data, attr_list, algo):
+def entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, algo):
     '''
     house_data(w/ tags)->entropy_of_all_attributes[]
     '''
-    attr_count = len(data.T) - 1
+    attr_count = len(data.T)
     total_entry = len(data)
     ent_list = []
     # for each attributes, calculate information gain
     for i in range(attr_count):
+        # to use argmin later, keep all attribute in the list
         # skip if not in attr_list
-        if(not i in attr_list):
-            ent_list.append(1000)  # infinate high entropy
+        if(not i in attr_list or attr_type[i] == 'class'):
+            ent_list.append(1000)  # infinite high entropy
             continue
-        # three possible classes are hard coded
-        # organize data by class
-        v_tag = {0: [], 1: [], 2: []}
-        for j in range(len(data)):
-            v_tag[data[j][i]].append(data[j][-1])
-        # sum of entropy of each class
-        ent = sum(len(v_tag[val])/total_entry * algo(v_tag[val])
-                  for val in v_tag)
+        # gather the class labels of the current attribute for each options
+        ent = 0
+        for j in attr_opt[i]:
+            option_tags = [row[tag_col] for row in data if row[i] == j]
+            ent += len(option_tags)/total_entry * algo(option_tags)
         ent_list.append(ent)
     return ent_list
 
@@ -64,13 +72,12 @@ class Node:
         if self.isLeaf:
             print( ind_str + "Leaf:CLASS" , self.tag, "OPTION", self.option , "DEPTH" , self.depth)
         else:
-            print( ind_str + "Node:SPLIT_ATTI" , attribute_list[self.attr_index] , "OPTION" , self.option , "DEPTH" , self.depth)
+            print( ind_str + attribute_list[self.attr_index] , "OPTION" , self.option , "DEPTH" , self.depth)
             for child in self.children:
                 child.print_tree(attribute_list, indent+2)
 
 
-def build_decision_tree(data, attr_list, meta, algo,_depth=0):
-
+def build_decision_tree(data, attr_list, attr_type, attr_opt, tag_col, algo, _depth=0):
     # If there are no more attributes that can be tested, return the most common tag
     if (not attr_list): # equivelent to len(attr_list) == 0
         return Node( _depth, isLeaf=True, tag=Counter(data.T[-1]).most_common()[0][0])
@@ -87,37 +94,32 @@ def build_decision_tree(data, attr_list, meta, algo,_depth=0):
         return Node( _depth, isLeaf=True, tag=Counter(tags).most_common()[0][0])
     # this subtraction is not necessary, just to be justify the name 'info_gain'
     if algo=='gini':
-        gini_val = entropy_in_list(data, attr_list, gini)
-        decision_attr = np.argmin(gini_val)
+        gini_val = entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, gini)
+        decided_attr = np.argmin(gini_val)
     elif algo=='entropy':
-        info_gain = [original_entropy - ent for ent in entropy_in_list(data, attr_list, entropy)]
-        decision_attr = np.argmax(info_gain)
+        info_gain = [original_entropy - ent for ent in entropy_in_list(data, attr_list, attr_type, attr_opt, tag_col, entropy)]
+        decided_attr = np.argmax(info_gain)
 
     # get the index of the attribute with highest information gain
-    nd = Node( _depth, isLeaf=False, attr_index=decision_attr ) 
+    nd = Node( _depth, isLeaf=False, attr_index=decided_attr ) 
     # keep track of a majority tag in case the leaf is None
-    nd.tag = Counter(data.T[-1]).most_common()[0][0]
+    # .most_common()[0][0] returns the most common tag (key of a dict)
+    nd.tag = Counter(data.T[tag_col]).most_common()[0][0] 
     # remove decision attribute from attr_list
-    new_attr_list = [x for x in attr_list if x != decision_attr]
+    new_attr_list = [x for x in attr_list if x != decided_attr]
 
-    meta_decided_attribute = meta['attribute_info'][decision_attr]
-    if (meta_decided_attribute['attr_type'] == 'categorical'):
-        nd.possible_options = meta_decided_attribute['attr_possible_options']
-    elif (meta_decided_attribute['attr_type'] == 'numerical'):
-        return;  
-    print(nd.possible_options)
     # build subtree for each possible option 
-    for v in nd.possible_options:
+    for opt in attr_opt[decided_attr]:
         # filtered data
-        new_data = data[data.T[decision_attr] == v]
-        subtree = build_decision_tree(new_data, new_attr_list, meta, algo, _depth+1) 
-        subtree.option = v
+        new_data = data[data.T[decided_attr] == opt]
+        subtree = build_decision_tree(new_data, new_attr_list, attr_type, attr_opt, tag_col, algo, _depth+1) 
+        subtree.option = opt
         nd.children.append(subtree)
         subtree.parent = nd
-
     return nd
 
 
+# depreciated function
 def func_generate_template_json(attribute_list):
     """
     generate a json names file
@@ -132,21 +134,21 @@ def func_generate_template_json(attribute_list):
         json.dump(attr_info, f, indent=2)
 
 
-def load_data(cvsfilename): 
-    meta = {'classatcolumn': -1, 'possible_classes':[], 'attributes':[], 'attribute_info':[]}
+def load_data(cvsfilename, csv_delimiter=','): 
     # import data, include encoding to ommit BOM  
     data = []
     with open(cvsfilename, 'r', encoding='utf-8-sig') as csvfile:
-        reader = csv.reader(csvfile)
+        reader = csv.reader(csvfile, delimiter=csv_delimiter)
         for row in reader:
             if len(row) != 0: # skip empty lines
                 data.append(row)
     # drop the attribute row from the list
     attributes = data.pop(0)
-    data = np.array(data).astype(int)
+    data = np.array(data).astype(float)
     return (data, attributes)
 
 
+# depreciated function
 def load_meta(jsonfilename):
     meta = {};
     with open(jsonfilename) as json_file:
@@ -175,10 +177,13 @@ def evaluate(data, tree):
     return correct / len(data)
 
 
-def dispatch(data, meta, algo, random_state=42):
+def dispatch(data, attr, attr_type, attr_opt, tag_col, algo, random_state=42, printTree=False):
     train, test = train_test_split(data, test_size=0.2, shuffle=True, random_state=random_state)
-    tree = build_decision_tree(train, list(range(len(meta['attributes'])-1)), meta, algo)
-    tree.print_tree(meta['attributes'])
+    # build a attr_list not including the class attribute
+    attr_list = [i for i in range(len(attr)) if attr_type[i] != "class"]
+    tree = build_decision_tree(train, attr_list, attr_type, attr_opt, tag_col, algo)
+    if(printTree):
+        tree.print_tree(attr)
     return evaluate(train, tree), evaluate(test, tree)
 
 
