@@ -1,6 +1,7 @@
 from math import sqrt
 from statistics import mean
 import random
+import numpy as np  
 
 def build_confusion_matrix(true_tags, pred_tags, class_list):
     '''
@@ -61,5 +62,9 @@ def create_bootstrap_replace(data, n_samples):
     return bootstrap_data
 
 
-da = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+da = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+dat = np.array(da)
 print(create_bootstrap_replace(da, 6))
+print(np.array_split(dat, 3))
+print(np.concatenate((np.array_split(dat, 3), np.array_split(dat, 3))))
+

@@ -11,10 +11,28 @@ print("classes: " , cancer_attribute_options[cancer_tag_col])
 # print(cancer_attribute_options)
 # print(cancer_data[:5])
 
-eval_train, eval_test = dispatch_decision_tree(cancer_data, \
-    cancer_attribute, \
-    cancer_attribute_type, \
-    cancer_attribute_options, \
-    cancer_tag_col, \
-    "gini", printTree=True)
-print(eval_train, eval_test)
+# eval_train, eval_test = dispatch_decision_tree(cancer_data, \
+#     cancer_attribute, \
+#     cancer_attribute_type, \
+#     cancer_attribute_options, \
+#     cancer_tag_col, \
+#     "gini", printTree=True)
+# print(eval_train, eval_test)
+
+report = dispatch_k_fold(cancer_data, 
+    cancer_attribute, 
+    cancer_attribute_type, 
+    cancer_attribute_options, 
+    cancer_tag_col, 
+    minimal_size_for_split=0.,
+    minimal_gain=0.,
+    maximal_depth=10000,
+    algo="entropy",  
+    random_state=42, 
+    k_fold=10,
+    n_trees=10,
+    binary_class=False, 
+    bootstrap_percentage=0.9
+)
+
+print(report)
