@@ -1,9 +1,5 @@
-from ensurepip import bootstrap
 from math import sqrt
 from statistics import mean
-from matplotlib.pyplot import axis
-
-from regex import P
 from decision_tree import * 
 
 
